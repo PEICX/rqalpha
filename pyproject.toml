@@ -1,0 +1,95 @@
+[project]
+name = "rqalpha"
+description = "Ricequant Algorithm Trading System"
+readme = "README.rst"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "ricequant", email = "public@ricequant.com"}
+]
+classifiers = [
+    'Programming Language :: Python',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
+]
+requires-python = ">=3.8"
+dependencies = [
+    'requests',
+    'numpy < 2.0.0 ; python_version <= "3.11"',
+    'numpy >=2.0.0 ; python_version >= "3.12"',
+    'pandas >=1.0.5, <4.0.0',  # pandas 版本自带 Requires-Python 分流，无需按版本去切分
+    'python-dateutil',
+    'logbook',
+    'click >=7.0.0',
+    'jsonpickle',
+    'simplejson',
+    'PyYAML',
+    'tabulate',
+    'rqrisk >=1.0.10',
+    'h5py',
+    'hdf5plugin',
+    'matplotlib >=3.1.0',
+    "openpyxl",
+    "methodtools",
+    "filelock",
+    "typing-extensions >=4.5.0"
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/ricequant/rqalpha"
+
+[project.scripts]
+rqalpha = "rqalpha.__main__:entry_point"
+
+[project.optional-dependencies]
+profiler = ["line_profiler"]
+
+[build-system]
+requires = [
+    "setuptools>=61.0.0",
+    "setuptools_scm[toml]>=7.0.0",
+    "wheel>=0.38.0"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.setuptools.packages.find]
+include = ["rqalpha", "rqalpha.*"]
+
+[tool.setuptools.package-data]
+"rqalpha" = [
+    '*.yml',
+    'examples/*.*',
+    'examples/data_source/*.*',
+    'examples/extend_api/*.*',
+    'resource/*.*',
+    'utils/translations/zh_Hans_CN/LC_MESSAGES/*',
+    "mod/rqalpha_mod_sys_analyser/report/templates/*.xlsx",
+]
+
+[tool.setuptools_scm]
+write_to = "rqalpha/_version.py"
+tag_regex = "^release/(?P<version>.*)$"
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
+[tool.mypy]
+follow_imports = "silent"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["B909"]
+preview = true
