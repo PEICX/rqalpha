@@ -61,7 +61,10 @@ class StockdbDayBarStore(AbstractDayBarStore):
         self._corp_actions = corp_action_loader
         self._etf = etf
         self._bars = {}
-        self._meta_checked = set()  # 本会话已向服务端确认过最新日期的代码
+        # STOCKDB_TRUST_DAY_CACHE=1: 历史回测场景，直接信任本地日线缓存，
+        # 不再逐票向服务端确认“是否有更新数据”（大组合+多进程会把串行服务打满）。
+        self._meta_checked = set(self._universe._meta.keys()) \
+            if os.environ.get("STOCKDB_TRUST_DAY_CACHE") else set()
 
     def get_bars(self, order_book_id):
         code = order_book_id.split(".")[0]
@@ -309,11 +312,15 @@ class StockdbMinuteStore(object):
             ratio = _etf_limit_ratio(self._day_bar_store._universe.name_of(code))
         else:
             ratio = _stock_limit_ratio(code, is_st)
+        def _num(v):
+            # stockdb 分钟行偶发 null（停牌边缘/异常bar），按缺失处理
+            return np.nan if v is None else float(v)
+
         for i, row in enumerate(rows):
-            open_, close = float(row[1]), float(row[2])
-            high, low = float(row[3]), float(row[4])
+            open_, close = _num(row[1]), _num(row[2])
+            high, low = _num(row[3]), _num(row[4])
             arr[i] = (
-                int(row[0]), open_, close, high, low, float(row[5]), float(row[6]),
+                int(row[0]), open_, close, high, low, _num(row[5]), _num(row[6]),
                 _limit_price(pre_close, ratio, True), _limit_price(pre_close, ratio, False),
                 pre_close, is_st,
             )
@@ -331,25 +338,48 @@ class StockdbMinuteStore(object):
 
 
 class CorpActionLoader(object):
-    """除权除息事件加载与缓存（升序）"""
+    """除权除息事件加载与缓存（升序）。
+
+    除内存缓存外再落一份磁盘缓存：大组合回测时每个进程、每只持仓在盘前都会
+    调 get_dividend→get_corp_actions，几十个并发进程会同时打 stockdb 的串行
+    查询接口，导致整批回测卡住。磁盘缓存让每个进程只读本地 npy。
+    """
 
     def __init__(self, client):
         self._client = client
         self._events = {}
+        self._cache_dir = os.environ.get(
+            "STOCKDB_CORP_CACHE", os.path.expanduser("~/.rqalpha/stockdb_cache/corp"))
 
     def get(self, code):
         events = self._events.get(code)
-        if events is None:
-            rows = self._client.get_corp_actions(code)
-            events = np.zeros(len(rows), dtype=[
-                ('date', np.int64), ('div', np.float64), ('give', np.float64),
-                ('trans', np.float64), ('cum', np.float64),
-            ])
-            for i, (date_int, row) in enumerate(rows):
-                events[i] = (date_int, float(row.get("div", 0) or 0),
-                             float(row.get("give", 0) or 0), float(row.get("trans", 0) or 0),
-                             float(row.get("cum", 1) or 1))
-            self._events[code] = events
+        if events is not None:
+            return events
+        path = os.path.join(self._cache_dir, code + ".npy")
+        if os.path.exists(path):
+            try:
+                events = np.load(path)
+                self._events[code] = events
+                return events
+            except (OSError, ValueError):
+                pass
+        rows = self._client.get_corp_actions(code)
+        events = np.zeros(len(rows), dtype=[
+            ('date', np.int64), ('div', np.float64), ('give', np.float64),
+            ('trans', np.float64), ('cum', np.float64),
+        ])
+        for i, (date_int, row) in enumerate(rows):
+            events[i] = (date_int, float(row.get("div", 0) or 0),
+                         float(row.get("give", 0) or 0), float(row.get("trans", 0) or 0),
+                         float(row.get("cum", 1) or 1))
+        self._events[code] = events
+        try:
+            os.makedirs(self._cache_dir, exist_ok=True)
+            tmp = path + ".%d.tmp.npy" % os.getpid()
+            np.save(tmp, events)
+            os.replace(tmp, path)
+        except OSError as e:
+            system_log.warning("stockdb corp action cache save failed: {}".format(e))
         return events
 
 
