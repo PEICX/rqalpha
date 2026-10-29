@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""策略1: 日线双均线 + 基准(ETF代理指数)"""
+"""策略1: 日线双均线"""
 import sys
 sys.path.insert(0, "/root/pcx/rqalpha-release-6.5.0")
 
@@ -46,14 +46,13 @@ def main():
             },
             "sys_analyser": {
                 "enabled": True,
-                "benchmark": "000300.XSHG",
                 "output_file": "/tmp/stockdb_test/out_s1.pkl",
             },
         },
     }
     result = run_code(CODE, config)
     summary = result["sys_analyser"]["summary"]
-    for k in ["total_returns", "annualized_returns", "benchmark_total_returns",
+    for k in ["total_returns", "annualized_returns",
               "sharpe", "max_drawdown", "total_trades"]:
         print(k, "=", summary.get(k))
 
