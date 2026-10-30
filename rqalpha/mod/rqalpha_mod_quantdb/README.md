@@ -43,7 +43,7 @@ mod:
     catalog_path: /root/pcx/quantdb/catalog.duckdb
     cache_dir: ~/.rqalpha/quantdb_cache
     risk_free_rate: 0.02      # 平坦无风险利率（无收益率曲线数据）
-    threads: 2                # 64 并发回测时每进程限 2 线程
+    threads: 2                # 100 并发回测时每进程限 2 线程
     memory_limit: 2GB         # DuckDB 单进程内存上限
     minute_end: ""            # 空=自动探测最后一个分钟完整的交易日；或 YYYYMMDD
     minute_mem_days: 512      # 分钟K内存 LRU 天数

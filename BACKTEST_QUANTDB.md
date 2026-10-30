@@ -171,7 +171,8 @@ PYTHONPATH=$PWD python3 -m rqalpha.mod.rqalpha_mod_quantdb.prewarm --minute --co
 ```
 
 - 日K/指数缓存用 mmap 加载，多进程共享物理内存页，并发内存不翻倍。
-- 64 并发回测时保持 `threads: 2`（每进程 DuckDB 线程数），避免线程爆炸。
+- 机器配置 2026-10-30 起为 limit=56核，100 并发批量回测已验证可行；并发回测时保持
+  `threads: 2`（每进程 DuckDB 线程数），避免线程爆炸。
 - 缓存新鲜度按"数据探测"判断（探测到 quantdb 数据更新才重建），
   数据快照不更新就不会反复重扫。
 
