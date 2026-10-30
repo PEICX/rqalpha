@@ -28,8 +28,10 @@
 
 ### 1.2 日线回测
 
-用户级配置 `/root/.rqalpha/mod_config.yml` 已经默认启用了 stockdb，所以命令行
-不需要再写 `-mc`：
+> **注意**：用户级配置 `/root/.rqalpha/mod_config.yml` 的默认数据源**已切换为
+> quantdb**（见 `BACKTEST_QUANTDB.md`）。要用 stockdb 跑命令行回测，
+> 先把用户级配置改回 stockdb（quantdb.enabled 改 false、stockdb.enabled 改 true），
+> 或者每次命令行显式指定：
 
 ```bash
 cd /root/pcx/rqalpha-release-6.5.0
@@ -39,7 +41,11 @@ python3 -m rqalpha run \
   -s 2024-01-02 -e 2024-12-31 \
   -a stock 100000 \
   -fq 1d \
-  -o /tmp/out.pkl
+  -o /tmp/out.pkl \
+  -mc stockdb.enabled True \
+  -mc stockdb.lib rqalpha.mod.rqalpha_mod_stockdb \
+  -mc stockdb.server_dir /root/pcx/stockdb \
+  -mc quantdb.enabled False
 ```
 
 ### 1.3 分钟线回测
@@ -126,7 +132,11 @@ print(r["portfolio"])        # 每日净值/现金等
   < 命令行参数
 ```
 
-当前用户级配置内容（已存在）：
+当前用户级配置**默认启用的是 quantdb**（stockdb 段保留但 `enabled: false`，
+完整内容见 `BACKTEST_QUANTDB.md` 1.2）。stockdb 与 quantdb 互斥，
+**两者只能启用一个**。
+
+如果要用 stockdb 作为默认数据源，把用户级配置改成：
 
 ```yaml
 mod:
@@ -134,31 +144,20 @@ mod:
     enabled: true
     lib: rqalpha.mod.rqalpha_mod_stockdb
     server_dir: /root/pcx/stockdb
+
+  quantdb:
+    enabled: false
 ```
 
-如果换一台机器或用户级配置丢了，可以二选一恢复：
-
-**方式 A：重建用户级配置**
-
-```bash
-mkdir -p ~/.rqalpha
-cat > ~/.rqalpha/mod_config.yml <<'EOF'
-mod:
-  stockdb:
-    enabled: true
-    lib: rqalpha.mod.rqalpha_mod_stockdb
-    server_dir: /root/pcx/stockdb
-EOF
-```
-
-**方式 B：每次命令行显式指定**
+或者不改默认配置，每次命令行显式指定（记得同时关掉 quantdb）：
 
 ```bash
 python3 -m rqalpha run -f strategy.py -s 2024-01-02 -e 2024-12-31 \
   -a stock 100000 \
   -mc stockdb.enabled True \
   -mc stockdb.lib rqalpha.mod.rqalpha_mod_stockdb \
-  -mc stockdb.server_dir /root/pcx/stockdb
+  -mc stockdb.server_dir /root/pcx/stockdb \
+  -mc quantdb.enabled False
 ```
 
 `-mc stockdb.lib ...` 不能省。`stockdb` 不是 `sys_*` 内置 mod，不给 `lib`
@@ -180,6 +179,8 @@ __config__ = {
             "lib": "rqalpha.mod.rqalpha_mod_stockdb",
             "server_dir": "/root/pcx/stockdb",
         },
+        # 用户级配置默认启用了 quantdb，这里显式关闭避免两个数据源互相覆盖
+        "quantdb": {"enabled": False},
         "sys_analyser": {"enabled": True},
     },
 }

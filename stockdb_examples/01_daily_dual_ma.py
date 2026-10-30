@@ -44,6 +44,8 @@ def main():
                 "lib": "rqalpha.mod.rqalpha_mod_stockdb",
                 "server_dir": "/root/pcx/stockdb",
             },
+            # 用户级配置默认启用了 quantdb，这里显式关闭避免两个数据源互相覆盖
+            "quantdb": {"enabled": False},
             "sys_analyser": {
                 "enabled": True,
                 "output_file": "/tmp/stockdb_test/out_s1.pkl",

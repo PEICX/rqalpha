@@ -29,6 +29,8 @@ def run_s4():
                  "frequency": "1d", "accounts": {"stock": 100000}},
         "mod": {"stockdb": {"enabled": True, "lib": "rqalpha.mod.rqalpha_mod_stockdb",
                             "server_dir": "/root/pcx/stockdb"},
+                # 用户级配置默认启用了 quantdb，这里显式关闭避免两个数据源互相覆盖
+                "quantdb": {"enabled": False},
                 "sys_analyser": {"enabled": True, "benchmark": None,
                                  "output_file": "/tmp/stockdb_test/out_s4.pkl"}},
     }
