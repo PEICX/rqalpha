@@ -499,7 +499,18 @@ class QuantdbMinuteStore(object):
             return np.empty(0, dtype=CS_DTYPE)
         path = os.path.join(self._cache_dir, code, "{}.npy".format(date_int))
         if not os.path.exists(path) and code not in self._loaded_full:
-            self._load_full_history(code)
+            # 2026-10-30 修改：缓存未命中时只加载当日，不再全历史落盘。
+            # 原实现会把该标的所有历史日写成 npy，多进程回测在池子较大时
+            # 会瞬间写爆磁盘（本次 18 并发写出 1.4M 文件 / +12GB）。
+            self._loaded_full.add(code)
+            rows = self._client.load_minute_day(self._universe.symbol_of(code), date_int)
+            if not rows:
+                self._empty.add(key)
+                return np.empty(0, dtype=CS_DTYPE)
+            arr = self._build(code, date_int, rows)
+            self._mem_put(key, arr)
+            _atomic_save_npy(path, arr)
+            return arr
         if os.path.exists(path):
             try:
                 arr = np.load(path, mmap_mode="r")

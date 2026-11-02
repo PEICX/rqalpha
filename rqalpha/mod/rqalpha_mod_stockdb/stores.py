@@ -11,6 +11,7 @@
 
 import datetime
 import os
+import threading
 
 import numpy as np
 import pandas as pd
@@ -247,6 +248,7 @@ class StockdbMinuteStore(object):
         self._day_bar_store = day_bar_store
         self._mem_days = int(mem_days)
         self._mem = {}
+        self._mem_lock = threading.Lock()
         self._loaded_full = set()  # 已做过整历史加载的代码
 
     def get_day(self, code, date_int):
@@ -276,9 +278,13 @@ class StockdbMinuteStore(object):
         return arr
 
     def _mem_put(self, key, arr):
-        self._mem[key] = arr
-        while len(self._mem) > self._mem_days:
-            self._mem.pop(next(iter(self._mem)))
+        with self._mem_lock:
+            self._mem[key] = arr
+            while len(self._mem) > self._mem_days:
+                try:
+                    self._mem.pop(next(iter(self._mem)))
+                except (StopIteration, KeyError):
+                    break
 
     def _load_full_history(self, code):
         """单请求拉取该标的全部分钟K，按交易日切片缓存"""
@@ -307,7 +313,7 @@ class StockdbMinuteStore(object):
         if n == 0:
             return arr
         # 涨跌停基准价与 ST 标志取自当日日K
-        pre_close, is_st = self._day_info(code, date_int)
+        pre_close, is_st, day_close = self._day_info(code, date_int)
         if code.startswith(("51", "56", "58", "15")):
             ratio = _etf_limit_ratio(self._day_bar_store._universe.name_of(code))
         else:
@@ -324,17 +330,31 @@ class StockdbMinuteStore(object):
                 _limit_price(pre_close, ratio, True), _limit_price(pre_close, ratio, False),
                 pre_close, is_st,
             )
+        # stockdb 的 1min 是「前复权」口径, 日K 是「不复权」口径:
+        # ETF 份额拆分后, 拆分前的分钟价会被除权(如 159851 拆 1:2 后 2025 年
+        # 分钟价约为日K一半), 与日K/涨跌停基准错位, 导致所有卖单被误判为跌停。
+        # 用当日日K收盘 / 当日最后一根分钟收盘 还原为不复权价。
+        if len(arr) and np.isfinite(day_close) and day_close > 0:
+            last_close = float(arr[-1]["close"])
+            if np.isfinite(last_close) and last_close > 0:
+                scale = day_close / last_close
+                if abs(scale - 1.0) > 1e-4:
+                    arr["open"] = arr["open"] * scale
+                    arr["close"] = arr["close"] * scale
+                    arr["high"] = arr["high"] * scale
+                    arr["low"] = arr["low"] * scale
         return arr
 
     def _day_info(self, code, date_int):
-        """返回 (当日日K pre_close, is_st)"""
+        """返回 (当日日K pre_close, is_st, close)"""
         bars = self._day_bar_store.get_bars(code + ".XSHG" if code.startswith(("5", "6")) else code + ".XSHE")
         if len(bars) == 0:
-            return np.nan, False
+            return np.nan, False, np.nan
         pos = bars["datetime"].searchsorted(np.int64(date_int * 1000000))
         if pos < len(bars) and int(bars["datetime"][pos]) == date_int * 1000000:
-            return float(bars["pre_close"][pos]), bool(bars["is_st"][pos])
-        return np.nan, False
+            return (float(bars["pre_close"][pos]), bool(bars["is_st"][pos]),
+                    float(bars["close"][pos]))
+        return np.nan, False, np.nan
 
 
 class CorpActionLoader(object):
