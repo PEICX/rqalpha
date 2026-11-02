@@ -241,6 +241,8 @@ RQAlpha 的提示，本地回测可忽略。
 
 ## 6. 相关文件
 
+- `DATA_SOURCE_PLAYBOOK.md` — 本地数据源接入的标准化流程手册（新数据集接入、
+  数据更新回归、口径问题排查、踩坑记录）
 - `rqalpha/mod/rqalpha_mod_quantdb/README.md` — mod 的数据能力、口径、限制、性能
 - `quantdb_examples/` — 4 个可直接运行的示例
 - `reports/verification.md` — 验收记录（复权/分红/基准/停牌/数据一致性逐项）
