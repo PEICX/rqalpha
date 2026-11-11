@@ -20,8 +20,23 @@ import numpy as np
 
 from rqalpha.utils.logger import system_log
 
-CACHE_VERSION = 1
+CACHE_VERSION = 4  # v4: T+0 判定改交易所前缀口径(沪 511/513/518), 修复 513* 被误标纯境内按 T+1 的问题
 ACTIVE_DATE = "2999-12-31"
+
+# T+0 交易品种（交易所官方口径）:
+#   沪市按代码段: 511=债券/货币, 513=跨境(QDII/港股通), 518=黄金商品 —— 一律 T+0;
+#   深市 159 混合, 按清单 etf_type 关键词判: 跨境/QDII/港股通/债券/货币/商品/黄金 = T+0,
+#   其余(纯境内股票型) = T+1。包内 etf_type 有错标(如 513160 标"纯境内"), 沪市不信任它。
+_T0_KEYWORDS = ("跨境", "QDII", "qdii", "债券", "货币", "商品", "黄金", "港股通", "恒生", "海外", "纳指",
+                "标普", "日经", "中概", "油气", "豆粕")
+
+
+def _etf_tplus(code: str, etf_type: str) -> int:
+    if code.startswith("5"):
+        return 0 if code[:3] in ("511", "513", "518") else 1  # 511债券/513跨境/518黄金 = T+0
+    if code.startswith("159"):
+        return 0 if any(k in (etf_type or "") for k in _T0_KEYWORDS) else 1
+    return 1
 
 # quantdb symbol 后缀 -> rqalpha exchange
 EXCHANGE_MAP = {"SH": "XSHG", "SZ": "XSHE", "BJ": "BJSE"}
@@ -151,6 +166,7 @@ class Universe(object):
         day_meta = self._client.load_day_meta()
         list_dates = self._client.load_list_dates()
         index_meta = self._client.load_index_meta()
+        etf_codes = self._client.load_etf_codes()
         calendar = self._client.load_calendar()
 
         self._meta = {}
@@ -160,12 +176,15 @@ class Universe(object):
             list_date = list_dates.get(symbol) or ""
             if not (len(list_date) == 8 and list_date.isdigit() and list_date >= "19000101"):
                 list_date = str(first)
+            etf_name, etf_type = etf_codes.get(symbol, ("", ""))
             self._meta[code] = {
                 "symbol": symbol,
-                "name": names.get(symbol, ""),
+                "name": names.get(symbol, "") or etf_name,
                 "first": int(first),
                 "last": int(last),
                 "list_date": list_date,
+                "etf": symbol in etf_codes,
+                "etf_type": etf_type,
             }
         self._indexes = {}
         for symbol, (first, last, category) in index_meta.items():
@@ -192,18 +211,22 @@ class Universe(object):
         dicts = []
         for code, info in self._meta.items():
             listed = _to_datestr(int(info["list_date"]))
-            dicts.append({
+            is_etf = bool(info.get("etf"))
+            d = {
                 "order_book_id": symbol_to_order_book_id(info["symbol"]),
                 "symbol": info["name"] or code,
                 "round_lot": 100,
                 "listed_date": listed,
                 "de_listed_date": ACTIVE_DATE,
-                "type": "CS",
+                "type": "ETF" if is_etf else "CS",
                 "exchange": EXCHANGE_MAP.get(info["symbol"].partition(".")[2], "XSHE"),
-                "board_type": _board_type(code),
-                "market_tplus": 1,
+                "board_type": "MainBoard" if is_etf else _board_type(code),
+                "market_tplus": _etf_tplus(code, info.get("etf_type", "")) if is_etf else 1,
                 "status": "Active",
-            })
+            }
+            if is_etf:
+                d["fund_type"] = "Stock"
+            dicts.append(d)
         for code, info in self._indexes.items():
             suffix = info["symbol"].partition(".")[2]
             dicts.append({

@@ -112,6 +112,22 @@ class DuckdbClient(object):
         ).fetchall()
         return {r[0]: (int(r[1]), int(r[2]), r[3] or "") for r in rows}
 
+    def load_etf_codes(self) -> Dict[str, Tuple[str, str]]:
+        """ETF 代码集合（v_etf_instruments, symbol -> (简称, etf_type)）。
+
+        v_daily_unadjusted 已并入 ETF 日线后，universe 构建需区分 type=CS/ETF。
+        etf_type 用于 T+0/T+1 判定: 跨境(QDII/港股通)/债券/货币/商品类 ETF = T+0,
+        仅纯境内股票型 = T+1（与交易所规则一致）。
+        """
+        try:
+            rows = self._con.execute(
+                "SELECT symbol, coalesce(csname, extname, ''), coalesce(etf_type, '') "
+                "FROM v_etf_instruments"
+            ).fetchall()
+        except Exception:
+            return {}
+        return {r[0]: (r[1] or "", r[2] or "") for r in rows}
+
     def load_calendar(self) -> List[int]:
         """交易日历（升序 YYYYMMDD）。
 

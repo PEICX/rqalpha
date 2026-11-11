@@ -102,10 +102,17 @@ class QuantdbDataSource(BaseDataSource):
         self._index_store = index_store
         self.register_day_bar_store(INSTRUMENT_TYPE.CS, cs_store)
         self.register_day_bar_store(INSTRUMENT_TYPE.INDX, index_store)
+        # ETF: v_daily_unadjusted / v_adjust_factors 已并入 ETF 行 -> 日线与复权因子
+        # 复用 CS store。分红/拆分 store 对 ETF 代码查询为空（ETF 分红只体现为
+        # ex_factor 阶梯），挂上仅为避免 (type, market) KeyError。
+        self.register_day_bar_store(INSTRUMENT_TYPE.ETF, cs_store)
 
         self.register_dividend_store(INSTRUMENT_TYPE.CS, QuantdbDividendStore(corp_loader))
         self.register_split_store(INSTRUMENT_TYPE.CS, QuantdbSplitStore(corp_loader))
         self.register_ex_factor_store(INSTRUMENT_TYPE.CS, QuantdbExFactorStore(factor_loader))
+        self.register_dividend_store(INSTRUMENT_TYPE.ETF, QuantdbDividendStore(corp_loader))
+        self.register_split_store(INSTRUMENT_TYPE.ETF, QuantdbSplitStore(corp_loader))
+        self.register_ex_factor_store(INSTRUMENT_TYPE.ETF, QuantdbExFactorStore(factor_loader))
 
         def _get_bars_fn(order_book_id):
             # 供停牌/ST 判定使用；指数不参与
@@ -246,7 +253,10 @@ class QuantdbDataSource(BaseDataSource):
     def get_open_auction_bar(self, instrument, dt):
         # 用 09:30 竞价 bar 的真实量额；无分钟数据时回退到日K
         # （默认实现会把全天成交量当成竞价量，明显偏大）
-        if instrument.type == 'CS':
+        # 2026-11-04 修正: ETF 也必须走真实竞价 bar。
+        # 原来只判 'CS' → ETF 落到 rqalpha 默认实现, 竞价量回退成【全天成交量】,
+        # 使"竞价买入"的单量上限被放大 50-500 倍（容量结论系统性偏乐观）。
+        if instrument.type in ('CS', 'ETF'):
             code = instrument.order_book_id.split(".")[0]
             day_int = _to_date_int(dt)
             auction = self._minute_store.get_auction(code, day_int)
