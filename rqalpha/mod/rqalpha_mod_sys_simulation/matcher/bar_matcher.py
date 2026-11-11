@@ -92,7 +92,10 @@ class DefaultBarMatcher(BaseMatcher):
         if self._volume_limit:
             volume = self._get_bar_volume(order, open_auction=open_auction)
             if volume == volume:
-                volume_limit = round(volume * self._volume_percent) - self._turnover[order.order_book_id]
+                # 集合竞价撮合: JQ 对齐口径 —— 上限=竞价量本身(100%), 不乘 volume_percent。
+                # 竞价量=当日真实竞价成交档位, 小单全成、超竞价量的部分作废, 与实盘竞价排队一致。
+                _vp = 1.0 if open_auction else self._volume_percent
+                volume_limit = round(volume * _vp) - self._turnover[order.order_book_id]
                 volume_limit = round_order_quantity(instrument, volume_limit)
                 if volume_limit <= 0:
                     if order.type == ORDER_TYPE.MARKET:
